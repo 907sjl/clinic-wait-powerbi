@@ -88,7 +88,7 @@ Doing so grants the ability to filter visuals to specific metrics and apply the 
 also simplifies the use of bar charts to place different metrics side by side for comparison.    
 
 Pivoting a horizontal list of milestone columns into a vertical fact table results in a simplified data model in that there are fewer dimensions playing a single 
-role. There is a single relationship between the dimension table and the fact table instead of multiple sub-classes of age category for each process metric.    
+role. There is a single relationship between the dimension table and the fact table instead of multiple sub-classes of age category, for example.    
 
 The transforms:
 1. Reference the source **Referrals** table
@@ -99,7 +99,7 @@ The transforms:
 
 ![Days to milestones example](images/days_to_milestone_example.jpg)    
 Care has to be taken with this fact table because the days to each referral milestone are not additive. In the example above the days until seen includes the days 
-to accept and the days until scheduled. The total days across all milestones is 13 days, and that is meaningless. The median days to any one milestone across all 
+to accept and the days until scheduled. The total days including all milestones is 13 days, and that is meaningless. The median days to any one milestone across all 
 referrals is meaningful, however.    
 
 ### Standard Calendar Table 
@@ -121,7 +121,7 @@ The **Clinic** dimension is sourced from the **Referral** table and represents t
 ### Other Tables 
 ![Contents of the Other Queries group](images/other_group.jpg)    
 The default Other Queries group has one remaining table that doesn't fit with the other groups. The **Report Measure** table is used to place separate metrics 
-side-by-side in bar charts with axis labels. Measures are added to a visualization by filtering on them instead of adding them to the visualization design.    
+side-by-side in bar charts with axis labels. Measures are added to a visualization by filtering on the **Report Measure** table instead of adding them to the visualization design.    
 
 ![Report Measure table sample data](images/measure_table.jpg)    
 The records of the **Report Measure** table are entered into the Power Query and stored as JSON. The name of each measure is stored along with columns that can be 
@@ -141,18 +141,22 @@ A DAX measure surfaces data for selected measures using a SWITCH statement on th
 <a href="images/data_model.jpg"><img alt="Data model ERD" src="images/data_model.jpg?raw=true"/></a> 
 Two tables host measures that are surfaced in report visualizations.  The **Referral** and **Processing Time** tables contain fact values.    
 
-Two data dimensions other than the **Standard Calendar** date table are persisted as separate tables.    
+Three data dimensions other than the **Standard Calendar** date table are persisted as separate tables, **Age Category**, **Clinic**, and **Process Metric**.    
 
 ![Age category table with sort by column](images/age_category_sort_by.jpg)    
 The **Age Category** dimension table has an added column with a pre-defined sort order. The sequence of the sort order reinforces the contextual meaning of the 
 dimension name. This sorting is neither based on alphabetical order nor volume of data. This dimension's name column has its sort order overridden by the SortOrder 
 column.    
 
+The **Clinic** dimension is used to facilitate a slicer and to provide a single table that filters all related fact tables simultaneously.    
 ![Clinic name slicer on report page](images/clinic_slicer.jpg)    
 This slicer is an example of filtering a dimension table versus an attribute of a table. The **Clinic** dimension table has a one-to-many relationship to the 
-**Referral** table, and by logical transition the **Processing Time** table.  Connecting the slicer to the **Clinic** table makes the slicer independent of the current, 
-filtered data set of referrals so that it always shows a complete list of clinics. Selecting a clinic value with the slicer will filter any measures that use the 
-**Referral** or the **Processing Time** table.    
+**Referral** table, and by logical transition the **Processing Time** table. Selecting a clinic value with the slicer will filter any measures that use the 
+**Referral** or the **Processing Time** table. Connecting the slicer to the **Clinic** table also makes the slicer independent of the current, 
+filtered data set of referrals so that it always shows a complete list of clinics.    
+
+**Process Metric** allows visuals or measures to filter the **Processing Time** table to either one milestone and then to sort the milestones in a semantic ordering 
+instead of by name.    
 
 The **Standard Calendar** table is the time dimension. It is a table of calendar dates and attributes such as year and month that are used to filter and sort 
 visualizations by date.    
@@ -220,8 +224,8 @@ Last Data Date for 90d Aged =
 The choice of 364 days is intended to reduce the jitter in the results across different dates in historical line charts. Most clinics do not see patients on 
 Sunday and so having the same number of Sundays in every sample helps to make the results more comparable between samples.    
 
-Moving measures like this one calculate across a window that includes every selected calendar date in the current filter context. Another layer builds upon 
-this measure to specifically select the most recent 364 day window.    
+Moving measures like this one start by calculating across a window that includes every selected calendar date in the current filter context. Another layer builds upon 
+this measure to specifically select the most recent date from which to then calculate a 364-day window.    
 
 ```
 Ending 364d Count by Milestone after 90d = 
@@ -232,9 +236,9 @@ Ending 364d Count by Milestone after 90d =
 This measure creates a filter context with only one date, the last date in the current filter context, and then invokes the moving total measure within that 
 more focused context. Power BI calls this *context transition*.    
 
-A slicer on the report page selects a single month at a time as the overall filter context that is further filtered by these measures. The LASTDATE function is 
-selecting the last date within the data set created by this slicer. Then after context transition the MAX function in the nested measure is really only working 
-with this one date.    
+A slicer on the report page selects a single month at a time as the overall filter context that is then manipulated by these nested measures, each with their 
+own local context derived from the global report filter context. The LASTDATE function is selecting the last date within the data set created by the slicer. 
+Then after context transition the MAX function in the nested measure creates a new context that only includes one date.    
 ![Month slicer on report page](images/clinic_slicer.jpg)    
 
 The **Referral** table and the **Standard Calendar** table share a relationship on the date when the referral is sent to the clinic. Filtering **Standard Calendar** 
@@ -274,7 +278,7 @@ MAX(
   , 0)
 ```    
 
-The first layer counts the number of referrals sent in the moving 364 day window used by the median wait time measure. This is the same approach described above 
+The first layer counts the number of referrals sent in the moving 364-day window. This is the same approach described above 
 for the histogram of wait times where DATESBETWEEN is used with two measures for the starting and ending dates.    
 
 ```
@@ -364,7 +368,7 @@ rejected, canceled, or closed without being seen.
 These measures are also wrapped by the **Measured Whole Number Value** measure described above and included as entries in the **Report Measure** table so that 
 they can be displayed side-by-side in a bar chart visual.    
 
-Counts by process milestone are used to calculate the pace at which clinics reach those milestones within 90 days.    
+Measures of referral counts by process milestone achieved are then leveraged to calculate the pace at which clinics reach those milestones within 90 days.    
 
 ![Annotation of process timing](images/process_timing.jpg)    
 
@@ -395,9 +399,8 @@ Ending 364d Median Days to Milestone after 90d =
         , LASTDATE('Standard Calendar'[Date])) 
 ```    
 
-The **Processing Time** table is a long, reverse pivot table of referrals and the days required for each referral to reach each processing milestone. 
-This measure returns the median days across all milestones and must be filtered to specific milestones. The card visuals with the number of days to 
-accept, schedule, see, and complete referrals each filter this measure in the report designer.    
+This measure returns the median days across all milestones from the **Processing Time** table and must be filtered to specific milestones. The card 
+visuals with the number of days to accept, schedule, see, and complete referrals each filter this measure in the report designer.    
 
 ### Rate Seen, Waiting, or Unmet    
 ![Pie chart of referrals seen, waiting, or unmet](images/rate_seen_or_waiting.jpg)    
@@ -427,7 +430,7 @@ versus those waiting to be seen and those that were not scheduled. Referrals tha
 
 ### Days to Seen vs. Days as Scheduled
 ![Chart of days to scheduled vs days to seen](images/scheduled_vs_seen_curves.jpg)    
-Wait times for clinics, in this report, is the days to the earliest appointment that was scheduled. This is the earliest appointment that worked for both the patient 
+Wait time for clinics, in this report, is the days to the earliest appointment that was scheduled. This is the earliest appointment that worked for both the patient 
 and the clinic. Appointments can be rescheduled, cancelled, or the patient simply doesn't show. These outcomes increase the time required to see referred patients 
 and can cost the clinic valuable time.    
 
@@ -444,9 +447,11 @@ CALCULATE([Ending 364d Count by Earliest Appt after 90d]
     , ALL('Age Category') ) 
 ```    
 The lines that form the curves are cumulative across the age bins. Context transition is required to accomplish the cumulative counts used to calculate the 
-cumulative rates. CALCULATE and FILTER work together to create a new filter context for these measures that includes all Age Category bins when the measure 
-is called to calculate a count for each individual Age Category bin in the chart visual. A new Age Category filter includes all bins prior to and including 
-the Age Category bin that the measure was called for.    
+cumulative rates. CALCULATE and FILTER work together to create a new filter context for these measures that includes all Age Category bins instead of just the 
+**Age Category** values in the filtered context, then all **Age Category** values are filtered to those that come prior to the latest age category in the 
+current filter context.  The cumulative measure will be called to calculate a count for each individual age category bin in the chart visual's x-axis. Then 
+for each of those x-axis values, these measures with their context transition will include all age categories that are prior to and including the x-axis value 
+that they were called for.    
 
 ```
 Cum 364d Rate Referrals by Earliest Appt after 90d = 
@@ -457,13 +462,11 @@ Cum 364d Rate Referrals by Earliest Appt after 90d =
 ```    
 Then the cumulative rate is calculated in a DIVIDE function that calls each of the cumulative count measures.    
 
-The chart calculates this measure for every Age Category bin in the x-axis.        
-
 ### Data Driven Colors    
 ![Chart of days to seen with distribution bins](images/wait_histogram.jpg)    
-Bar chart visuals provide a way to color the bars using measures. Measures can be used with a ladder of rules that are configured in the visual 
-to select colors based on the measure's value. If you plan to use the same rules in more than one column or visual this creates redundant work 
-to set up and maintain the rules.    
+Bar chart visuals provide a way to color the bars using measures. By design, measures can be attached to bars in the configuration of the visual 
+to select colors based on the data used to plot the bar. If you plan to use the same color rules in more than one column or visual this creates redundant work 
+to set up and maintain the visuals.    
 
 A more maintainable approach is to use a single measure that embeds the ladder of rules and selects the appropriate color for the data within 
 the current filter context.    
@@ -481,9 +484,9 @@ Color by Category = SWITCH(
 
 ```    
 
-The color values in this example project are DAX simply measures defined as a constant value. The measure pair a color value 
+The color values in this example project are simply DAX measures defined as constant values. The measure pairs a color value 
 with a semantic meaning. This works for a simple report and is easy to maintain as long as the measures are grouped and named 
-so that they are found easily. A color table could also be used in more complicated scenarios.    
+so that they are found easily. A color rule table could also be used in more complicated scenarios.    
 
 ```
 Color 7d = "#55BCFF"
@@ -498,7 +501,7 @@ were more customizable in this way. Hopefully Microsoft will come around to crea
 
 ### Display Folders for Data Elements
 ![List of display folders](images/display_folders.jpg)    
-This report resulted in a large collection of measures with different inclusion criteria that build upon one another. They are organized into display folders 
+This report resulted in a large collection of measures with different inclusion criteria that build upon one another. These measures are organized into display folders 
 as are the table attributes. The measures are organized by the time frame of the inclusion criteria.    
 
 < [Portfolio](https://907sjl.github.io) | [Full Report](https://907sjl.github.io/pdf/Clinic%20Wait%20Times.pdf) | [PBIX File on GitHub](https://github.com/907sjl/clinic-wait-powerbi/blob/main/Clinic%20Wait%20Times.pbix) | [Overview](https://907sjl.github.io/clinic-wait-powerbi/clinic_wait_report)    
